@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VS Code 在 Linux 無法輸入中文的排查與修復</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121933;
+      --soft: #1a2347;
+      --text: #eef2ff;
+      --muted: #b9c2e5;
+      --line: #2a3568;
+      --accent: #7cc4ff;
+      --accent2: #9cffd0;
+      --warn: #ffd27a;
+      --danger: #ff9a9a;
+      --code: #0f1530;
+      --green: #56f09f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Noto Sans TC", Arial, sans-serif;
+      background: linear-gradient(180deg, #08101c 0%, #0b1020 100%);
+      color: var(--text);
+      line-height: 1.7;
+    }
+    .wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 20px 60px;
+    }
+    h1, h2, h3 { line-height: 1.25; margin-top: 0; }
+    h1 { font-size: 1.9rem; margin-bottom: 8px; }
+    h2 {
+      margin-top: 36px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 1.35rem;
+    }
+    h3 { margin-top: 22px; font-size: 1.05rem; color: var(--accent2); }
+    p, li { color: var(--muted); }
+    strong { color: var(--text); }
+    .hero, .card {
+      background: rgba(18, 25, 51, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+    }
+    .hero { margin-bottom: 28px; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-size: 0.88rem;
+    }
+    .badge.green { border-color: var(--green); color: var(--green); }
+    .badge.warn  { border-color: var(--warn);  color: var(--warn);  }
+    .badge.red   { border-color: var(--danger); color: var(--danger); }
+    code {
+      background: rgba(124, 196, 255, 0.12);
+      color: #dff3ff;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.93em;
+    }
+    pre {
+      margin: 10px 0;
+      padding: 14px 16px;
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow-x: auto;
+      color: #dfe8ff;
+      font-size: 0.91rem;
+      line-height: 1.6;
+    }
+    .note, .warn-box, .danger-box, .success-box {
+      border-left: 4px solid var(--accent);
+      background: rgba(124, 196, 255, 0.07);
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin: 14px 0;
+      color: var(--text);
+    }
+    .warn-box  { border-color: var(--warn);   background: rgba(255, 210, 122, 0.07); }
+    .danger-box{ border-color: var(--danger); background: rgba(255, 154, 154, 0.07); }
+    .success-box{ border-color: var(--green); background: rgba(86, 240, 159, 0.07); }
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      margin-top: 16px;
+    }
+    .card h3 { margin-top: 0; }
+    ol, ul { padding-left: 22px; margin: 8px 0; }
+    li { margin-bottom: 4px; }
+    .step {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin: 18px 0;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--soft);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 0.95rem;
+      margin-top: 2px;
+    }
+    .step-body { flex: 1; }
+    .step-body p { margin: 4px 0 8px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 0.93rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    th { color: var(--accent); background: rgba(18, 25, 51, 0.8); }
+    td { color: var(--muted); }
+    td:first-child { color: var(--text); font-weight: 500; }
+    .tl-item {
+      position: relative;
+      padding-left: 28px;
+      padding-bottom: 18px;
+      border-left: 2px solid var(--line);
+      margin-left: 8px;
+    }
+    .tl-item:last-child { border-left-color: transparent; }
+    .tl-dot {
+      position: absolute;
+      left: -7px;
+      top: 4px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .tl-dot.red  { background: var(--danger); }
+    .tl-dot.green{ background: var(--green); }
+    .tl-title { color: var(--text); font-weight: 600; }
+    .tl-desc  { color: var(--muted); font-size: 0.93rem; margin-top: 4px; }
+    a { color: var(--accent); }
+    .footer {
+      margin-top: 48px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      text-align: center;
+      border-top: 1px solid var(--line);
+      padding-top: 20px;
+    }
+    .section { margin-top: 28px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Hero -->
+  <section class="hero">
+    <h1>VS Code 在 Linux 無法輸入中文</h1>
+    <p>使用 IBus Chewing（新酒）輸入法時，Chrome 等軟體正常，但 VS Code 完全無法切換到中文輸入的排查紀錄與 Lesson Learned。</p>
+    <div class="meta">
+      <span class="badge">Ubuntu 24.04 LTS</span>
+      <span class="badge">VS Code Snap</span>
+      <span class="badge">IBus Chewing</span>
+      <span class="badge warn">Snap 隔離問題</span>
+      <span class="badge green">已解決 2026-04-08</span>
+    </div>
+  </section>
+
+  <!-- 現象 -->
+  <div class="section">
+    <h2>問題現象</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>可以輸入中文</h3>
+        <ul>
+          <li>Google Chrome</li>
+          <li>Firefox</li>
+          <li>GNOME Terminal</li>
+          <li>其他 GTK 原生應用</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>無法輸入中文</h3>
+        <ul>
+          <li>VS Code（Snap 安裝版）</li>
+        </ul>
+        <p style="margin-top:10px; font-size:.92rem;">按下輸入法切換鍵後，VS Code 內完全無反應，只能輸入英文。</p>
+      </div>
+      <div class="card">
+        <h3>系統輸入法狀態</h3>
+        <ul>
+          <li>IBus 1.5.29 正常執行</li>
+          <li>ibus-engine-chewing 正常</li>
+          <li>環境變數均已設定</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 排查時間軸 -->
+  <div class="section">
+    <h2>排查過程</h2>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-title">確認系統 IBus 環境變數</div>
+      <div class="tl-desc">
+        <code>GTK_IM_MODULE=ibus</code>、<code>QT_IM_MODULE=ibus</code>、<code>XMODIFIERS=@im=ibus</code> 均已在 <code>/etc/environment</code> 設定正確。排除環境變數遺漏的可能。
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-title">確認 IBus daemon 運行狀態</div>
+      <div class="tl-desc">
+        <code>ibus-daemon</code> 與 <code>ibus-engine-chewing</code> 均在正常執行。IBus 本身沒有問題。
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot red"></div>
+      <div class="tl-title">發現：VS Code 是 Snap 安裝版本</div>
+      <div class="tl-desc">
+        確認 <code>which code</code> 指向 <code>/snap/bin/code</code>，安裝版本為 Snap（<code>/snap/code/232/</code>）。
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot red"></div>
+      <div class="tl-title">根本原因：Snap 內部 GTK IM 模組缺少 IBus 支援</div>
+      <div class="tl-desc">
+        檢查 <code>~/snap/code/common/.cache/immodules/immodules.cache</code>，發現 Snap 捆綁的 GTK 模組清單中<strong>完全沒有 <code>im-ibus.so</code></strong>。
+        Snap 的沙箱隔離機制使其使用內建的 GTK 函式庫，而非系統版本，因此即使系統安裝了 IBus GTK 模組，Snap 內的 Electron 也無法載入它。
+      </div>
+    </div>
+
+    <div class="tl-item" style="border-left-color: transparent;">
+      <div class="tl-dot green"></div>
+      <div class="tl-title">解法：改裝官方 .deb 版本</div>
+      <div class="tl-desc">
+        移除 Snap 版，改用 Microsoft 官方 apt repository 安裝 .deb 版。.deb 版使用系統 GTK 函式庫，可正確載入 <code>im-ibus.so</code>，中文輸入立即恢復正常。
+      </div>
+    </div>
+  </div>
+
+  <!-- 根本原因詳解 -->
+  <div class="section">
+    <h2>根本原因詳解</h2>
+    <div class="danger-box">
+      <strong>Snap 沙箱隔離 × GTK IM 模組</strong><br>
+      Snap 為了可攜性，將所有 GTK 函式庫打包在套件內部（<code>/snap/code/*/usr/lib/</code>），並使用自己的 GTK immodules 快取。這份快取是在 Snap 封裝時預先產生的，<strong>不包含系統後來安裝的輸入法模組</strong>（例如 <code>ibus-gtk3</code>）。
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>比較項目</th><th>Snap 版</th><th>.deb 版</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>GTK 函式庫來源</td><td>Snap 內建</td><td>系統 <code>/usr/lib/</code></td></tr>
+        <tr><td>immodules 快取</td><td><code>~/snap/code/common/.cache/immodules/</code>（固定）</td><td>系統動態查找</td></tr>
+        <tr><td>im-ibus.so 可用性</td><td>無</td><td>有（來自 <code>ibus-gtk3</code>）</td></tr>
+        <tr><td>中文輸入</td><td>無法使用</td><td>正常</td></tr>
+        <tr><td>更新維護</td><td>自動（Snap Store）</td><td>透過 apt</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 解決步驟 -->
+  <div class="section">
+    <h2>完整解決步驟</h2>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>移除 Snap 版 VS Code</strong>
+        <pre>sudo snap remove code</pre>
+        <p>使用者設定位於 <code>~/.config/Code/</code>，移除 Snap 後<strong>不會被刪除</strong>，.deb 版安裝後可直接沿用。</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>加入 Microsoft 官方 apt repository</strong>
+        <pre>wget -qO- https://packages.microsoft.com/keys/microsoft.asc \
+  | gpg --dearmor \
+  | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
+
+sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/code stable main" \
+  > /etc/apt/sources.list.d/vscode.list'</pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>安裝 .deb 版 VS Code</strong>
+        <pre>sudo apt-get update
+sudo apt-get install -y code</pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>驗證安裝路徑並重新開啟</strong>
+        <pre>which code
+# 應顯示 /usr/bin/code（非 /snap/bin/code）</pre>
+        <p>重新啟動 VS Code，測試 IBus Chewing 中文輸入是否正常。</p>
+      </div>
+    </div>
+
+    <div class="success-box">
+      重新開啟 VS Code 後即可正常切換 IBus Chewing 並輸入中文，問題完全解決。
+    </div>
+  </div>
+
+  <!-- Lesson Learned -->
+  <div class="section">
+    <h2>Lesson Learned</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Snap 不等於原生</h3>
+        <p>Snap 套件的沙箱隔離有助於可攜性，但會切斷與系統 GTK 生態系的整合。<strong>凡是需要深度系統整合（輸入法、字型、主題）的應用程式，優先選擇 .deb 或 apt 版本</strong>，而非 Snap。</p>
+      </div>
+      <div class="card">
+        <h3>排查輸入法問題的起點</h3>
+        <p>遇到「A 軟體可輸入中文，B 軟體不行」時，先確認：</p>
+        <ol>
+          <li>兩個軟體的<strong>安裝方式</strong>是否相同</li>
+          <li>檢查 immodules 快取是否含 <code>im-ibus.so</code></li>
+          <li>確認二進位路徑（<code>which</code>）是 Snap、Flatpak 還是原生</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h3>環境變數正確不代表可用</h3>
+        <p><code>GTK_IM_MODULE=ibus</code> 設定正確，但如果<strong>程式載入的 GTK 函式庫找不到對應模組</strong>，設定就形同虛設。問題在函式庫層，不在環境變數。</p>
+      </div>
+    </div>
+
+    <div class="warn-box" style="margin-top:20px;">
+      <strong>Ubuntu 24.04 上 VS Code 的建議安裝方式：</strong>
+      使用 Microsoft 官方 apt repository（<code>packages.microsoft.com/repos/code</code>），而非 Ubuntu Snap Store 提供的版本。
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>記錄日期：2026-04-08 ｜ 環境：Ubuntu 24.04.4 LTS × VS Code 1.115.0 × IBus Chewing</p>
+  </div>
+
+</div>
+</body>
+</html>
