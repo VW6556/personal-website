@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Linux 音效無聲：SoundWire ACPI Machine Driver 排查與修復</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121933;
+      --soft: #1a2347;
+      --text: #eef2ff;
+      --muted: #b9c2e5;
+      --line: #2a3568;
+      --accent: #7cc4ff;
+      --accent2: #9cffd0;
+      --warn: #ffd27a;
+      --danger: #ff9a9a;
+      --code: #0f1530;
+      --green: #56f09f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Noto Sans TC", Arial, sans-serif;
+      background: linear-gradient(180deg, #08101c 0%, #0b1020 100%);
+      color: var(--text);
+      line-height: 1.7;
+    }
+    .wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 20px 60px;
+    }
+    h1, h2, h3 { line-height: 1.25; margin-top: 0; }
+    h1 { font-size: 1.9rem; margin-bottom: 8px; }
+    h2 {
+      margin-top: 36px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 1.35rem;
+    }
+    h3 { margin-top: 22px; font-size: 1.05rem; color: var(--accent2); }
+    p, li { color: var(--muted); }
+    strong { color: var(--text); }
+    .hero, .card {
+      background: rgba(18, 25, 51, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+    }
+    .hero { margin-bottom: 28px; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-size: 0.88rem;
+    }
+    .badge.green { border-color: var(--green); color: var(--green); }
+    .badge.warn  { border-color: var(--warn);  color: var(--warn);  }
+    .badge.red   { border-color: var(--danger); color: var(--danger); }
+    code {
+      background: rgba(124, 196, 255, 0.12);
+      color: #dff3ff;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.93em;
+    }
+    pre {
+      margin: 10px 0;
+      padding: 14px 16px;
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow-x: auto;
+      color: #dfe8ff;
+      font-size: 0.91rem;
+      line-height: 1.6;
+    }
+    .note, .warn-box, .danger-box, .success-box {
+      border-left: 4px solid var(--accent);
+      background: rgba(124, 196, 255, 0.07);
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin: 14px 0;
+      color: var(--text);
+    }
+    .warn-box  { border-color: var(--warn);   background: rgba(255, 210, 122, 0.07); }
+    .danger-box{ border-color: var(--danger); background: rgba(255, 154, 154, 0.07); }
+    .success-box{ border-color: var(--green); background: rgba(86, 240, 159, 0.07); }
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      margin-top: 16px;
+    }
+    .card h3 { margin-top: 0; }
+    ol, ul { padding-left: 22px; margin: 8px 0; }
+    li { margin-bottom: 4px; }
+    .step {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin: 18px 0;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--soft);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 0.95rem;
+      margin-top: 2px;
+    }
+    .step-body { flex: 1; }
+    .step-body p { margin: 4px 0 8px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 0.93rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    th { color: var(--accent); background: rgba(18, 25, 51, 0.8); }
+    td { color: var(--muted); }
+    td:first-child { color: var(--text); font-weight: 500; }
+    .tl-item {
+      position: relative;
+      padding-left: 28px;
+      padding-bottom: 18px;
+      border-left: 2px solid var(--line);
+      margin-left: 8px;
+    }
+    .tl-item:last-child { border-left-color: transparent; }
+    .tl-dot {
+      position: absolute;
+      left: -7px;
+      top: 4px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .tl-dot.red  { background: var(--danger); }
+    .tl-dot.green{ background: var(--green); }
+    .tl-title { color: var(--text); font-weight: 600; }
+    .tl-desc  { color: var(--muted); font-size: 0.93rem; margin-top: 4px; }
+    a { color: var(--accent); }
+    .footer {
+      margin-top: 48px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      text-align: center;
+      border-top: 1px solid var(--line);
+      padding-top: 20px;
+    }
+    .section { margin-top: 28px; }
+    .adr-table td { font-family: Consolas, "Courier New", monospace; font-size: 0.88rem; }
+    .adr-table td:first-child { font-family: inherit; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Hero -->
+  <section class="hero">
+    <h1>Linux 音效無聲：SoundWire ACPI Machine Driver 排查與修復</h1>
+    <p>Ubuntu 24.04 播放 YouTube 完全無聲，PipeWire 只顯示 Dummy Output。SoundWire 裝置與驅動程式皆正常，但 <code>sof_sdw</code> 機器驅動從未載入。問題根源在核心的 ACPI 機器匹配表缺少此款硬體組合，需手動修補並重新編譯核心模組才能解決。</p>
+    <div class="meta">
+      <span class="badge">Ubuntu 24.04 LTS</span>
+      <span class="badge">MSI Raider 16 Max HX B2</span>
+      <span class="badge">Intel ARL-S</span>
+      <span class="badge">SoundWire / SOF</span>
+      <span class="badge">Kernel 6.17.0-1017-oem</span>
+      <span class="badge warn">核心模組修補</span>
+      <span class="badge green">已解決 2026-04-09</span>
+    </div>
+  </section>
+
+  <!-- 問題現象 -->
+  <div class="section">
+    <h2>問題現象</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>有聲音</h3>
+        <ul>
+          <li>Windows（雙開機）</li>
+          <li>其他 Linux 發行版（不受影響）</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>無聲音</h3>
+        <ul>
+          <li>Ubuntu 24.04（所有聲音輸出）</li>
+          <li>YouTube、系統音效、音樂播放器</li>
+        </ul>
+        <p style="margin-top:10px; font-size:.92rem;">GNOME 音量設定只顯示 <strong>Dummy Output</strong>，找不到任何喇叭或耳機裝置。</p>
+      </div>
+      <div class="card">
+        <h3>系統偵測到的硬體</h3>
+        <ul>
+          <li>SoundWire 裝置存在於 sysfs</li>
+          <li>RT712 SDCA 驅動已綁定</li>
+          <li>RT1320 × 2 驅動已綁定</li>
+          <li><code>sof_sdw</code> 機器驅動<strong>未載入</strong></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Linux 音效堆疊簡介 -->
+  <div class="section">
+    <h2>Linux 音效堆疊架構</h2>
+    <div class="note">
+      <strong>理解音效堆疊有助於快速定位問題層級。</strong>從硬體到應用程式，每一層都有獨立職責。任何一層出問題都會造成無聲，但症狀各有不同。
+    </div>
+    <table>
+      <thead>
+        <tr><th>層級</th><th>元件</th><th>職責</th><th>本次狀態</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>硬體</td><td>RT712 SDCA、RT1320 × 2</td><td>實體音訊編解碼器與功率放大器</td><td>✅ 正常（SoundWire 已偵測）</td></tr>
+        <tr><td>匯流排驅動</td><td>SoundWire Intel 驅動</td><td>管理 SoundWire 鏈路通訊</td><td>✅ 正常</td></tr>
+        <tr><td>Codec 驅動</td><td><code>rt712-sdca</code>、<code>rt1320-sdw</code></td><td>驅動各別音訊晶片</td><td>✅ 已綁定</td></tr>
+        <tr><td>機器驅動</td><td><code>sof_sdw</code>（ACPI 機器表匹配）</td><td>將 codec 組合為完整音效卡</td><td>❌ <strong>匹配失敗，未載入</strong></td></tr>
+        <tr><td>韌體 DSP</td><td>SOF（Sound Open Firmware）</td><td>執行 DSP 上的音訊處理拓撲</td><td>⏸ 等待機器驅動</td></tr>
+        <tr><td>核心音效</td><td>ALSA</td><td>提供核心層音效裝置介面</td><td>⏸ 僅 Dummy Output</td></tr>
+        <tr><td>應用層</td><td>PipeWire / WirePlumber</td><td>管理音效路由與應用程式連接</td><td>⏸ 僅看到 Dummy Output</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 排查過程 -->
+  <div class="section">
+    <h2>排查過程</h2>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-title">確認 PipeWire / WirePlumber 狀態</div>
+      <div class="tl-desc">
+        執行 <code>wpctl status</code>，輸出只有 <code>Dummy Output</code>，完全沒有真實音效裝置。確認問題不在應用層或設定層。
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-title">確認 SoundWire 裝置已被偵測</div>
+      <div class="tl-desc">
+        <code>ls /sys/bus/soundwire/devices/</code> 顯示三個 SoundWire 裝置：
+        <code>sdw:0:0:025d:0713:01</code>（RT712 SDCA）、
+        <code>sdw:0:2:025d:1320:01:0</code>、
+        <code>sdw:0:2:025d:1320:01:1</code>（2 個 RT1320）。
+        硬體層正常，問題在更上層。
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-title">確認 Codec 驅動已成功綁定</div>
+      <div class="tl-desc">
+        <code>readlink /sys/bus/soundwire/devices/sdw:0:0:025d:0713:01/driver</code> 顯示 <code>rt712-sdca</code>。
+        RT1320 也已綁定 <code>rt1320-sdw</code>。驅動層正常，問題在機器驅動層。
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot red"></div>
+      <div class="tl-title">發現：<code>sof_sdw</code> 機器驅動從未載入</div>
+      <div class="tl-desc">
+        <code>lsmod | grep sof_sdw</code> 無輸出。查閱核心原始碼確認：<code>snd_soc_acpi_intel_arl_sdw_machines[]</code> 表中<strong>完全沒有</strong> RT712 SDCA（0x0713）搭配 RT1320 的組合項目，導致 ACPI 機器匹配失敗。
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot red"></div>
+      <div class="tl-title">第一次修補：只加入 1 個 RT1320，仍然失敗</div>
+      <div class="tl-desc">
+        首次修補加入 RT712（0x0713）+ 單一 RT1320 的 entry，重開機後 <code>sof_sdw</code> 仍未載入。
+        深入排查發現：link 2 上有<strong>兩個</strong> RT1320（uid=0 和 uid=1），
+        ACPI 機器匹配演算法要求<strong>精確比對所有已偵測裝置</strong>，缺一不可。
+      </div>
+    </div>
+
+    <div class="tl-item" style="border-left-color: transparent;">
+      <div class="tl-dot green"></div>
+      <div class="tl-title">第二次修補：加入雙 RT1320 + RT712，成功解決</div>
+      <div class="tl-desc">
+        更新修補內容，在 link 2 同時定義 uid=0（左聲道）和 uid=1（右聲道）兩個 RT1320。
+        重新編譯模組、部署、重開機後 <code>sof_sdw</code> 成功載入，YouTube 恢復聲音。
+      </div>
+    </div>
+  </div>
+
+  <!-- 根本原因詳解 -->
+  <div class="section">
+    <h2>根本原因詳解</h2>
+    <div class="danger-box">
+      <strong>ACPI 機器匹配表缺少此款硬體組合</strong><br>
+      Linux 核心模組 <code>snd-soc-acpi-intel-match.ko</code> 內的
+      <code>snd_soc_acpi_intel_arl_sdw_machines[]</code> 陣列定義了所有已知的 ARL 平台音效硬體組合。
+      若偵測到的 SoundWire 裝置組合不在表中，<code>sof_sdw</code> 就<strong>永遠不會載入</strong>，
+      導致 ALSA 只能產生 Dummy Output。
+    </div>
+
+    <h3>ACPI 機器匹配演算法</h3>
+    <p>匹配時核心會比對兩個條件，兩者皆須完全符合：</p>
+    <ol>
+      <li><strong>link_mask</strong>：哪些 SoundWire 鏈路（link 0～3）有裝置存在（以位元表示）</li>
+      <li><strong>links[]</strong>：每條鏈路上的裝置清單，包含每個裝置的 ADR（唯一位址）</li>
+    </ol>
+    <div class="warn-box">
+      <strong>精確匹配，不允許多也不允許少。</strong>
+      若表中定義 1 個 RT1320，但硬體有 2 個，匹配<strong>立即失敗</strong>。
+      同型號、不同 unique_id 的晶片在核心眼中是完全獨立的裝置。
+    </div>
+
+    <h3>SoundWire ADR 格式</h3>
+    <p>每個 SoundWire 裝置以 64 位元 ADR 唯一識別，格式如下：</p>
+    <table class="adr-table">
+      <thead>
+        <tr><th>位元範圍</th><th>欄位</th><th>本機範例值</th><th>說明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>[51:48]</td><td>link_id</td><td>0 / 2</td><td>SoundWire 鏈路編號（0～3）</td></tr>
+        <tr><td>[47:44]</td><td>version</td><td>3（固定）</td><td>SDCA 版本，通常為 3</td></tr>
+        <tr><td>[43:40]</td><td>unique_id</td><td>0 / 1</td><td>同鏈路同型號的序號，用以區分多顆</td></tr>
+        <tr><td>[39:24]</td><td>mfg_id</td><td>0x025D（Realtek）</td><td>MIPI 製造商 ID</td></tr>
+        <tr><td>[23:8]</td><td>part_id</td><td>0x0713 / 0x1320</td><td>晶片型號</td></tr>
+        <tr><td>[7:0]</td><td>class_id</td><td>0x01</td><td>SDCA 裝置類別</td></tr>
+      </tbody>
+    </table>
+    <p>本機三個裝置的 ADR 值：</p>
+    <pre>RT712 SDCA（link 0, uid 0）：0x000030025D071301
+RT1320 #1  （link 2, uid 0）：0x000230025D132001
+RT1320 #2  （link 2, uid 1）：0x000231025D132001</pre>
+
+    <h3>本機硬體 vs 核心既有定義</h3>
+    <table>
+      <thead>
+        <tr><th>比較項目</th><th>核心既有最接近 entry</th><th>本機硬體（MSI Raider）</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Link 0 Codec</td><td>RT722 SDCA（0x0722）</td><td>RT712 SDCA（<strong>0x0713</strong>）</td></tr>
+        <tr><td>Link 2 Amp 數量</td><td>RT1320 × 1（uid=0）</td><td>RT1320 × <strong>2</strong>（uid=0 + uid=1）</td></tr>
+        <tr><td>匹配結果</td><td>—</td><td>❌ 兩個條件均不符</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 解決步驟 -->
+  <div class="section">
+    <h2>完整解決步驟</h2>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>確認硬體裝置與驅動綁定狀況</strong>
+        <pre>ls /sys/bus/soundwire/devices/
+# 應出現：sdw:0:0:025d:0713:01
+#         sdw:0:2:025d:1320:01:0
+#         sdw:0:2:025d:1320:01:1
+
+readlink /sys/bus/soundwire/devices/sdw:0:0:025d:0713:01/driver
+# 應顯示：rt712-sdca</pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>建立編譯目錄並下載核心原始碼</strong>
+        <pre>mkdir -p /tmp/arl-build/sound/soc/intel/common
+cd /tmp/arl-build/sound/soc/intel/common
+
+# 從 GitHub 下載所需原始碼（master branch）
+BASE="https://raw.githubusercontent.com/torvalds/linux/master/sound/soc/intel/common"
+for f in soc-acpi-intel-{byt,cht,hsw-bdw,skl,kbl,bxt,glk,cnl,cfl,cml,icl,tgl,ehl,jsl,adl,rpl,mtl,arl,lnl,ptl,hda}-match.c \
+         soc-acpi-intel-sdw-mockup-match.c sof-function-topology-lib.c \
+         soc-acpi-intel-sdca-quirks.c; do
+  curl -sfL "$BASE/$f" -o "$f"
+done
+
+# ssp-common.c 使用 v6.17 tag（避免 API 不相容）
+curl -sfL "https://raw.githubusercontent.com/torvalds/linux/v6.17/sound/soc/intel/common/soc-acpi-intel-ssp-common.c" \
+  -o soc-acpi-intel-ssp-common.c
+
+# 下載標頭檔
+for h in soc-acpi-intel-sdw-mockup-match.h soc-acpi-intel-sdca-quirks.h sof-function-topology-lib.h; do
+  curl -sfL "$BASE/$h" -o "$h"
+done
+# ssp-common.h 從已安裝的核心標頭取得
+cp /usr/src/linux-oem-6.17-headers-$(uname -r)/include/sound/soc-acpi-intel-ssp-common.h .</pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>修補 <code>soc-acpi-intel-arl-match.c</code></strong>
+        <p>在既有程式碼中加入以下三段定義：</p>
+        <pre>/* ① RT712 SDCA 的兩個端點（headset jack + DMIC） */
+static const struct snd_soc_acpi_endpoint rt712_sdca_endpoints[] = {
+    { .num = 0, .aggregated = 0, .group_position = 0, .group_id = 0 },
+    { .num = 1, .aggregated = 0, .group_position = 0, .group_id = 0 },
+};
+
+/* ② RT712 SDCA 裝置（link 0, uid 0） */
+static const struct snd_soc_acpi_adr_device rt712_sdca_0_adr[] = {
+    {
+        .adr = 0x000030025D071301ull,
+        .num_endpoints = ARRAY_SIZE(rt712_sdca_endpoints),
+        .endpoints = rt712_sdca_endpoints,
+        .name_prefix = "rt712"
+    }
+};
+
+/* ③ 雙 RT1320（link 2：uid=0 左聲道，uid=1 右聲道，聚合為 group 1） */
+static const struct snd_soc_acpi_adr_device rt1320_2_dual_adr[] = {
+    {
+        .adr = 0x000230025D132001ull,
+        .num_endpoints = 1,
+        .endpoints = &spk_l_endpoint,
+        .name_prefix = "rt1320-1"
+    },
+    {
+        .adr = 0x000231025D132001ull,
+        .num_endpoints = 1,
+        .endpoints = &spk_r_endpoint,
+        .name_prefix = "rt1320-2"
+    }
+};
+
+/* ④ 組合鏈路陣列 */
+static const struct snd_soc_acpi_link_adr arl_rt712_l0_rt1320x2_l2[] = {
+    { .mask = BIT(0), .num_adr = ARRAY_SIZE(rt712_sdca_0_adr),  .adr_d = rt712_sdca_0_adr  },
+    { .mask = BIT(2), .num_adr = ARRAY_SIZE(rt1320_2_dual_adr), .adr_d = rt1320_2_dual_adr },
+    {}
+};
+
+/* ⑤ 在 snd_soc_acpi_intel_arl_sdw_machines[] 末尾加入新 entry */
+{
+    .link_mask = BIT(0) | BIT(2),
+    .links = arl_rt712_l0_rt1320x2_l2,
+    .drv_name = "sof_sdw",
+    .sof_tplg_filename = "sof-arl-rt722-l0_rt1320-l2.tplg",
+    .get_function_tplg_files = sof_sdw_get_tplg_files,
+},</pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>建立 Makefile 並編譯出樹外核心模組</strong>
+        <pre># /tmp/arl-build/Makefile
+obj-m += snd-soc-acpi-intel-match.o
+snd-soc-acpi-intel-match-y := \
+    sound/soc/intel/common/soc-acpi-intel-byt-match.o \
+    sound/soc/intel/common/soc-acpi-intel-arl-match.o \
+    ... （共 25 個物件檔）
+ccflags-y := -I$(src)/sound/soc/intel/common
+
+# 編譯
+cd /tmp/arl-build
+make -C /usr/src/linux-headers-$(uname -r) M=$(pwd) modules</pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>備份原始模組並部署修補版本</strong>
+        <pre>KVER=$(uname -r)
+MODULE="/lib/modules/$KVER/kernel/sound/soc/intel/common/snd-soc-acpi-intel-match.ko.zst"
+
+# 備份（只做一次）
+sudo cp "$MODULE" "${MODULE}.backup"
+
+# 壓縮並安裝
+zstd -19 -f /tmp/arl-build/snd-soc-acpi-intel-match.ko -o /tmp/new.ko.zst
+sudo cp /tmp/new.ko.zst "$MODULE"
+sudo depmod -a</pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <strong>重開機並驗證</strong>
+        <pre>sudo reboot
+
+# 重開機後確認：
+lsmod | grep sof_sdw        # 應顯示已載入
+wpctl status                # 應出現真實喇叭/耳機裝置
+grep rt712_sdca_0_adr /proc/kallsyms  # 確認修補符號存在</pre>
+      </div>
+    </div>
+
+    <div class="success-box">
+      重開機後 <code>sof_sdw</code> 成功載入，GNOME 音量設定出現真實喇叭裝置，YouTube 播放立即恢復聲音。
+    </div>
+  </div>
+
+  <!-- Lesson Learned -->
+  <div class="section">
+    <h2>Lesson Learned</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Dummy Output ≠ 硬體損壞</h3>
+        <p>PipeWire 顯示 Dummy Output，<strong>不代表音效晶片壞了</strong>。通常是 ALSA 層以下的機器驅動未載入。先確認 SoundWire/ACPI 層，再往上排查，而非重裝驅動或系統。</p>
+      </div>
+      <div class="card">
+        <h3>ACPI 機器匹配是嚴格全比對</h3>
+        <p>Linux 核心的機器匹配演算法要求<strong>完全吻合所有 SoundWire 裝置</strong>。哪怕只多一顆同型晶片（不同 unique_id），整個匹配就失敗。新款筆電常因核心未及時更新匹配表而無聲。</p>
+      </div>
+      <div class="card">
+        <h3>unique_id 決定裝置唯一性</h3>
+        <p>同型號的兩顆 RT1320 晶片（<code>uid=0</code> 和 <code>uid=1</code>）在核心看來是<strong>完全不同的裝置</strong>。ADR 中 bits [43:40] 才是 unique_id，bits [51:48] 才是 link_id——讀法容易搞混，需要細心解碼。</p>
+      </div>
+      <div class="card">
+        <h3>出樹外模組是短期解法</h3>
+        <p>編譯 out-of-tree 核心模組可<strong>不動整個核心</strong>直接替換單一 <code>.ko</code> 檔。但每次核心更新後須重新編譯。正確做法是向上游提交 patch，讓核心官方支援此硬體。</p>
+      </div>
+      <div class="card">
+        <h3>拓撲檔案（.tplg）是 DSP 藍圖</h3>
+        <p>SOF 拓撲檔定義 DSP 上的音訊處理管線。新版核心支援以 <strong>SDCA function-based 拓撲</strong>（<code>sof-sdca-jack-id0.tplg</code>、<code>sof-sdca-2amp-id2.tplg</code>）取代單一大型 <code>.tplg</code>，實現跨 codec 通用化。</p>
+      </div>
+      <div class="card">
+        <h3>排查方向：由下而上</h3>
+        <p>音效問題排查順序：<strong>硬體偵測 → 匯流排驅動 → Codec 驅動 → 機器驅動 → DSP/SOF → ALSA → PipeWire → 應用層</strong>。在哪一層中斷就在哪一層解決，不要跳層。</p>
+      </div>
+    </div>
+
+    <div class="warn-box" style="margin-top:20px;">
+      <strong>新款 Intel 筆電在 Ubuntu 24.04 的建議做法：</strong>
+      若音效出現 Dummy Output，優先安裝最新 OEM 核心（<code>linux-oem-6.17</code>）並更新 <code>firmware-sof-signed</code>。
+      若仍有問題，查閱 <a href="https://github.com/thesofproject/linux/issues" target="_blank">SOF Project Issues</a> 是否有對應的硬體支援 patch。
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>記錄日期：2026-04-09 ｜ 環境：Ubuntu 24.04.4 LTS × Kernel 6.17.0-1017-oem × MSI Raider 16 Max HX B2 × Intel ARL-S</p>
+  </div>
+
+</div>
+</body>
+</html>
